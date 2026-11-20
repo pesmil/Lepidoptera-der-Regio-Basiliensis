@@ -1,0 +1,36 @@
+# Holt jede Nacht die aktuellen iNaturalist-Daten, erzeugt die Artseiten und speichert alles im Repository.
+# GitHub Pages veröffentlicht die neuen Dateien danach automatisch.
+name: iNaturalist-Daten aktualisieren
+
+on:
+  schedule:
+    - cron: "30 2 * * *"   # täglich 02:30 UTC (03:30/04:30 Schweizer Zeit)
+  workflow_dispatch:        # zusätzlich von Hand startbar: Actions → «iNaturalist-Daten aktualisieren» → Run workflow
+
+permissions:
+  contents: write
+
+concurrency:
+  group: inat-daten
+  cancel-in-progress: false
+
+jobs:
+  daten:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Daten und Artseiten erzeugen
+        # Eigene Domain? Dann hier die Adresse fest eintragen, z. B. --site-url https://www.beispiel.ch/
+        run: python inat_daten.py --site-url "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+      - name: Änderungen speichern
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A daten/inat art en sitemap.xml robots.txt index.html
+          if git diff --cached --quiet; then echo "Keine Änderungen"; exit 0; fi
+          git commit -m "iNaturalist-Daten aktualisiert"
+          git push
