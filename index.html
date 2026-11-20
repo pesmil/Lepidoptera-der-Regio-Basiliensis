@@ -8,8 +8,8 @@
 <!-- Vorschau beim Teilen (Open Graph). Nach dem Online-Stellen bei og:url und og:image die volle Adresse eintragen,
      z. B. https://benutzer.github.io/repo/vorschau.jpg. Die erzeugten Artseiten erhalten automatisch volle Adressen. -->
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="Lepidoptera der Regio Basiliensis">
-<meta property="og:title" content="Lepidoptera der Regio Basiliensis">
+<meta property="og:site_name" content="Lepidoptera der Region Basiliensis">
+<meta property="og:title" content="Lepidoptera der Region Basiliensis">
 <meta property="og:description" content="Alle Schmetterlingsarten der Region Basel: Artporträts, Verbreitungskarten, Flugzeiten und Fotos aus iNaturalist und historischen Nachweisen.">
 <meta property="og:image" content="bilder/vorschau.jpg">
 <meta property="og:locale" content="de_CH">
@@ -350,7 +350,7 @@ footer .links{display:flex;justify-content:center;flex-wrap:wrap;gap:6px 22px;ma
 
 <header class="top">
   <div class="wrap bar">
-    <a class="brand" href="#/"><span class="l" data-t="title">Lepidoptera der Regio Basiliensis</span><span class="s" aria-hidden="true">Lepidoptera Regio Basel</span></a>
+    <a class="brand" href="#/"><span class="l" data-t="title">Lepidoptera der Region Basiliensis</span><span class="s" aria-hidden="true">Lepidoptera Regio Basel</span></a>
     <nav class="main" id="nav" aria-label="Hauptnavigation">
       <a href="#/" data-r="" data-t="nav_start">Start</a>
       <a href="#/projekt" data-r="projekt" data-t="nav_projekt">Projekt</a>
@@ -368,7 +368,7 @@ footer .links{display:flex;justify-content:center;flex-wrap:wrap;gap:6px 22px;ma
   <img id="band-img" src="bilder/banner.jpg" width="2000" height="1334" fetchpriority="high" alt="">
   <div class="wrap">
     <span class="kick" data-t="kick">Region Basel</span>
-    <h1 data-t="title">Lepidoptera der Regio Basiliensis</h1>
+    <h1 data-t="title">Lepidoptera der Region Basiliensis</h1>
     <p data-t="hero_p">Alle Schmetterlingsarten der Region Basel: Artporträts mit Verbreitungskarten, Flugzeiten und Fotos, laufend ergänzt durch neue Beobachtungen.</p>
     <div class="stats">
       <div><b id="st-obs">–</b><span data-t="st_obs">Beobachtungen</span></div>
@@ -486,7 +486,7 @@ function dateLabel(i){const c=CONFIG.dateClasses,prev=i?c[i-1].to:null;
   return i===0?t(`vor ${c[0].to+1}`,`before ${c[0].to+1}`):i===c.length-1?t(`ab ${prev+1}`,`since ${prev+1}`):`${prev+1}–${c[i].to}`}
 // Feste Texte im Seitenrahmen (Kopf, Banner, Fuss)
 const SHELL={
-  skip:["Zum Inhalt springen","Skip to content"],title:["Lepidoptera der Regio Basiliensis","Lepidoptera of the Regio Basiliensis"],
+  skip:["Zum Inhalt springen","Skip to content"],title:["Lepidoptera der Region Basiliensis","Lepidoptera of the Regio Basiliensis"],
   nav_start:["Start","Home"],nav_projekt:["Projekt","Project"],nav_tax:["Taxonomie & Daten","Taxonomy & data"],nav_flug:["Was fliegt?","What's flying?"],
   nav_ber:["Berichte","Reports"],nav_mit:["Mitmachen","Get involved"],nav_kon:["Kontakt","Contact"],
   kick:["Region Basel","Basel region"],
@@ -663,7 +663,7 @@ const periodLabel=(m,h)=>t(`${h===1?"Anfang":"Ende"} ${MONTHS_LONG[m-1]}`,`${h==
 const lastDay=m=>new Date(2000,m,0).getDate(); // Schaltjahr, damit der 29. Februar mitzählt
 function periodParams(m,h){const last=lastDay(m),days=[];for(let d=(h===1?1:16);d<=(h===1?15:last);d++)days.push(d);return{month:m,day:days.join(",")}}
 const NARROW=()=>innerWidth<700,TINY=()=>innerWidth<520;
-const SITE=()=>t("Lepidoptera der Regio Basiliensis","Lepidoptera of the Regio Basiliensis");
+const SITE=()=>t("Lepidoptera der Region Basiliensis","Lepidoptera of the Regio Basiliensis");
 const DEFAULT_DESC=()=>t("Alle Schmetterlingsarten der Region Basel: Artporträts, Verbreitungskarten, Flugzeiten und Fotos aus iNaturalist und historischen Nachweisen.",
   "All butterflies and moths of the Basel region: species accounts, distribution maps, flight periods and photos from iNaturalist and historical records.");
 // Seitentitel, Beschreibung, Ansage für Screenreader und Fokus auf die Überschrift
@@ -740,11 +740,12 @@ async function pageHome(){
     <div class="intro"><h2>${t("Entdecke die Falter der Region","Discover the region's Lepidoptera")}</h2>
       <p>${t("Zu jeder Art gibt es eine Verbreitungskarte, Diagramme zu Flugzeit und Häufigkeit, Fotos und die neuesten Nachweise. Suche eine Art oder stöbere in der zufälligen Auswahl:","Each species has a distribution map, charts of flight period and frequency, photos and the latest records. Search for a species or browse the random selection:")}</p></div>
     <div class="find"><label class="sr" for="hq">${t("Art suchen","Search species")}</label>
-      <input id="hq" type="search" role="combobox" aria-expanded="false" aria-controls="hq-l" aria-autocomplete="list" autocomplete="off" spellcheck="false" enterkeyhint="search" placeholder="${t("Art suchen (deutsch oder wissenschaftlich) …","Search species (English or scientific name) …")}">
+      <input id="hq" type="search" role="combobox" aria-expanded="false" aria-controls="hq-l" aria-autocomplete="list" autocomplete="off" spellcheck="false" enterkeyhint="search" placeholder="${t("Art suchen (Deutsch oder Wissenschaftlich) …","Search species (English or scientific name) …")}">
       <ul id="hq-l" role="listbox" aria-label="${t("Gefundene Arten","Matching species")}" hidden></ul></div>
     <div class="grid" id="rand">${skel()}</div>
     <div class="more"><a class="btn" href="${u("#/arten")}">${t("Alle Arten ansehen","View all species")}</a></div>
   </section>
+  <br/>
   <section>
     <div class="intro"><h2>${t("Was fliegt gerade?","What's flying now?")}</h2>
       <p>${t(`Die am häufigsten gemeldeten Arten <strong>${periodLabel(m,h)}</strong>. So lässt sich eingrenzen, was zu dieser Jahreszeit unterwegs ist.`,`The most frequently recorded species in <strong>${periodLabel(m,h)}</strong>, a guide to what is on the wing at this time of year.`)}</p></div>
@@ -839,7 +840,7 @@ function landscapes(){
 function pageProject(){
   $("app").innerHTML=`${subnav(PROJ_NAV(),"#/projekt")}<article class="prose" style="margin:0 auto">
   <h1 class="h2">${t("Projektbeschrieb","Project description")}</h1>
-  <p class="lead">${t("«Lepidoptera der Regio Basiliensis» dokumentiert alle Schmetterlingsarten der Region Basel, ihre Verbreitung, Flugzeiten und Veränderungen, und macht die Ergebnisse öffentlich zugänglich.",
+  <p class="lead">${t("«Lepidoptera der Region Basiliensis» dokumentiert alle Schmetterlingsarten der Region Basel, ihre Verbreitung, Flugzeiten und Veränderungen, und macht die Ergebnisse öffentlich zugänglich.",
     "“Lepidoptera of the Regio Basiliensis” documents all butterfly and moth species of the Basel region, their distribution, flight periods and changes, and makes the results publicly available.")}</p>
   ${landscapes()}
   <h2 class="h3">${t("Ausgangslage","Background")}</h2>
@@ -881,7 +882,7 @@ function pageProject(){
   <p>Altermatt, F., Fritsch, D., Huber, W. &amp; Whitebread, S. (2006). <i>Die Gross-Schmetterlingsfauna der Region Basel.</i> Entomologische Gesellschaft Basel.</p>
   <p>${t("Weitere Publikationen und Jahresberichte unter","Further publications and annual reports under")} <a href="${u("#/berichte")}">${t("Berichte","Reports")}</a>.</p>
   </article>`;
-  setPage(t("Projektbeschrieb","Project description"),t("Ziele, Methoden und Hintergrund des Projekts «Lepidoptera der Regio Basiliensis».","Aims, methods and background of the project “Lepidoptera of the Regio Basiliensis”."));
+  setPage(t("Projektbeschrieb","Project description"),t("Ziele, Methoden und Hintergrund des Projekts «Lepidoptera der Region Basiliensis».","Aims, methods and background of the project “Lepidoptera of the Regio Basiliensis”."));
 }
 let areaMap=null;
 async function pageArea(){
@@ -966,7 +967,7 @@ async function pageList(group){
   <section><div class="intro"><h1>${group?gl[group]:t("Artenliste","Species list")}</h1><p id="cnt">${t("Alle im Gebiet nachgewiesenen Arten in systematischer Reihenfolge, nach Familien gruppiert.","All species recorded in the area in systematic order, grouped by family.")}</p></div>
   <div class="tools">
     <div class="seg" role="group" aria-label="${t("Gruppe","Group")}">${["","gross","klein"].map(g=>`<a href="${u("#/arten"+(g?"/"+g:""))}" class="${g===group?"on":""}" ${g===group?'aria-current="page"':""}>${gl[g]}</a>`).join("")}</div>
-    <label class="sr" for="q">${t("Art suchen","Search species")}</label><input id="q" type="search" placeholder="${t("Art suchen (deutsch oder wissenschaftlich) …","Search species (English or scientific name) …")}" value="${esc(listState.q)}">
+    <label class="sr" for="q">${t("Art suchen","Search species")}</label><input id="q" type="search" placeholder="${t("Art suchen (Deutsch oder Wissenschaftlich) …","Search species (English or scientific name) …")}" value="${esc(listState.q)}">
     <label class="sr" for="fam">${t("Familie","Family")}</label><select id="fam"><option value="">${t("Alle Familien","All families")}</option></select>
     <div class="seg" id="view" role="group" aria-label="${t("Ansicht","View")}"><button type="button" data-v="list">${t("Liste","List")}</button><button type="button" data-v="grid">${t("Fotos","Photos")}</button></div>
   </div><div id="list">${loading(t("Lade Artenliste …","Loading species list …"))}</div></section>`;
@@ -1352,7 +1353,7 @@ function pageContact(){
   <p>${t(`Auf iNaturalist erreichst du uns über die Projektseiten <a href="https://www.inaturalist.org/projects/${CONFIG.projects[0].slug}" target="_blank" rel="noopener">Macrolepidoptera</a> und <a href="https://www.inaturalist.org/projects/${CONFIG.projects[1].slug}" target="_blank" rel="noopener">Microlepidoptera</a>.`,
     `On iNaturalist you can reach us via the project pages <a href="https://www.inaturalist.org/projects/${CONFIG.projects[0].slug}" target="_blank" rel="noopener">Macrolepidoptera</a> and <a href="https://www.inaturalist.org/projects/${CONFIG.projects[1].slug}" target="_blank" rel="noopener">Microlepidoptera</a>.`)}</p>
   </section>`;
-  setPage(t("Kontakt","Contact"),t("Kontakt und Projektleitung von «Lepidoptera der Regio Basiliensis».","Contact and project team of “Lepidoptera of the Regio Basiliensis”."));
+  setPage(t("Kontakt","Contact"),t("Kontakt und Projektleitung von «Lepidoptera der Region Basiliensis».","Contact and project team of “Lepidoptera of the Regio Basiliensis”."));
 }
 
 /* ===================== Impressum ===================== */
@@ -1375,7 +1376,7 @@ function pageImpressum(){
   <p>${t("Im Browser werden nur Einstellungen der Artenliste (Suche, Ansicht) sowie für eine Stunde zwischengespeicherte iNaturalist-Antworten abgelegt. Diese Daten verlassen deinen Browser nicht.","Your browser stores only species list settings (search, view) and iNaturalist responses cached for one hour. This data never leaves your browser.")}</p>
   <h2 class="h3">${t("Haftung für Links","Liability for links")}</h2>
   <p>${t("Für die Inhalte verlinkter externer Seiten sind ausschliesslich deren Betreiber verantwortlich.","The operators of linked external sites are solely responsible for their content.")}</p></section>`;
-  setPage(t("Impressum & Datenschutz","Legal notice & privacy"),t("Impressum und Datenschutzhinweise der Website «Lepidoptera der Regio Basiliensis».","Legal notice and privacy information of the website “Lepidoptera of the Regio Basiliensis”."));
+  setPage(t("Impressum & Datenschutz","Legal notice & privacy"),t("Impressum und Datenschutzhinweise der Website «Lepidoptera der Region Basiliensis».","Legal notice and privacy information of the website “Lepidoptera of the Regio Basiliensis”."));
 }
 
 /* ===================== Router ===================== */
