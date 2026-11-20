@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Lepidoptera der Regio Basiliensis</title>
+<title>Lepidoptera der Region Basiliensis</title>
 <meta name="description" content="Alle Schmetterlingsarten der Region Basel: Artporträts, Verbreitungskarten, Flugzeiten und Fotos aus iNaturalist und historischen Nachweisen.">
 <!-- Vorschau beim Teilen (Open Graph). Nach dem Online-Stellen bei og:url und og:image die volle Adresse eintragen,
      z. B. https://benutzer.github.io/repo/vorschau.jpg. Die erzeugten Artseiten erhalten automatisch volle Adressen. -->
@@ -367,7 +367,7 @@ footer .links{display:flex;justify-content:center;flex-wrap:wrap;gap:6px 22px;ma
 <div class="hero" id="band">
   <img id="band-img" src="bilder/banner.jpg" width="2000" height="1334" fetchpriority="high" alt="">
   <div class="wrap">
-    <span class="kick" data-t="kick">Region Basel · Schweiz, Deutschland, Frankreich</span>
+    <span class="kick" data-t="kick">Region Basel</span>
     <h1 data-t="title">Lepidoptera der Regio Basiliensis</h1>
     <p data-t="hero_p">Alle Schmetterlingsarten der Region Basel: Artporträts mit Verbreitungskarten, Flugzeiten und Fotos, laufend ergänzt durch neue Beobachtungen.</p>
     <div class="stats">
@@ -489,7 +489,7 @@ const SHELL={
   skip:["Zum Inhalt springen","Skip to content"],title:["Lepidoptera der Regio Basiliensis","Lepidoptera of the Regio Basiliensis"],
   nav_start:["Start","Home"],nav_projekt:["Projekt","Project"],nav_tax:["Taxonomie & Daten","Taxonomy & data"],nav_flug:["Was fliegt?","What's flying?"],
   nav_ber:["Berichte","Reports"],nav_mit:["Mitmachen","Get involved"],nav_kon:["Kontakt","Contact"],
-  kick:["Region Basel · Schweiz, Deutschland, Frankreich","Basel region · Switzerland, Germany, France"],
+  kick:["Region Basel","Basel region"],
   hero_p:["Alle Schmetterlingsarten der Region Basel: Artporträts mit Verbreitungskarten, Flugzeiten und Fotos, laufend ergänzt durch neue Beobachtungen.",
           "All butterflies and moths of the Basel region: species accounts with distribution maps, flight periods and photos, continuously updated with new records."],
   st_obs:["Beobachtungen","Records"],st_sp:["Arten","Species"],st_us:["Beobachter·innen","Observers"],
@@ -736,11 +736,7 @@ const TILES=()=>[
 async function pageHome(){
   const {m,h}=currentPeriod();
   $("app").innerHTML=`
-  <section>
-    <div class="intro"><h2>${t("Entdecken","Explore")}</h2><p>${t("Die Website im Überblick.","The website at a glance.")}</p></div>
-    <div class="tiles">${TILES().map(([href,ti,te])=>`<a class="tile" href="${u(href)}"><h3>${esc(ti)}</h3><p>${esc(te)}</p><span class="go" aria-hidden="true">→</span></a>`).join("")}</div>
-  </section>
-  <section>
+
     <div class="intro"><h2>${t("Entdecke die Falter der Region","Discover the region's Lepidoptera")}</h2>
       <p>${t("Zu jeder Art gibt es eine Verbreitungskarte, Diagramme zu Flugzeit und Häufigkeit, Fotos und die neuesten Nachweise. Suche eine Art oder stöbere in der zufälligen Auswahl:","Each species has a distribution map, charts of flight period and frequency, photos and the latest records. Search for a species or browse the random selection:")}</p></div>
     <div class="find"><label class="sr" for="hq">${t("Art suchen","Search species")}</label>
