@@ -410,6 +410,11 @@ const CONFIG = {
   mapCenter: [47.56, 7.6], mapZoom: 9,
   gridKm: 5,                       // Rasterweite der Verbreitungskarte (5 km = Raster des Projekts, passt zum Perimeter)
   maxObs: 3000,                    // max. live geladene iNaturalist-Beobachtungen pro Art (nur ohne vorberechnete Daten)
+  // Welche iNaturalist-Qualitätsstufen auf der Website zählen. «casual» (Gelegentlich: gezüchtet, ohne Datum/Ort
+  // oder ohne Foto) ist ausgeschlossen. Für alle Stufen: ["research","needs_id","casual"] (auch in inat_daten.py ändern).
+  qualityGrades: ["research","needs_id"],
+  // Relative Häufigkeit: Jahre mit weniger Beobachtungen (der ganzen Gruppe) erscheinen hell und gestrichelt
+  minYearTotal: 50,
   // Historische Daten (aus Excel, erzeugt mit historische_daten.py). null = keine.
   historicPath: "daten/historisch/",
   // Vorberechnete iNaturalist-Daten (nächtlich erzeugt mit inat_daten.py / GitHub Action). Fehlt der Ordner,
@@ -487,7 +492,7 @@ function dateLabel(i){const c=CONFIG.dateClasses,prev=i?c[i-1].to:null;
   return i===0?t(`vor ${c[0].to+1}`,`before ${c[0].to+1}`):i===c.length-1?t(`ab ${prev+1}`,`since ${prev+1}`):`${prev+1}–${c[i].to}`}
 // Feste Texte im Seitenrahmen (Kopf, Banner, Fuss)
 const SHELL={
-  skip:["Zum Inhalt springen","Skip to content"],title:["Lepidoptera der Region Basiliensis","Lepidoptera of the Regio Basiliensis"],
+  skip:["Zum Inhalt springen","Skip to content"],title:["Lepidoptera der Region Basiliensis","Lepidoptera of the Region Basiliensis"],
   nav_start:["Start","Home"],nav_projekt:["Projekt","Project"],nav_tax:["Taxonomie & Daten","Taxonomy & data"],nav_flug:["Was fliegt?","What's flying?"],
   nav_ber:["Berichte","Reports"],nav_mit:["Mitmachen","Get involved"],nav_kon:["Kontakt","Contact"],
   kick:["Region Basel","Basel region"],
@@ -541,7 +546,8 @@ let PRE;const pre=()=>PRE||(PRE=CONFIG.inatPath?getJSON(CONFIG.inatPath+"uebersi
 const okLic=l=>!!l&&CONFIG.photoLicenses.includes(String(l).toLowerCase());
 const okPhoto=p=>p&&okLic(p.license_code);
 const PIDS=CONFIG.projects.map(p=>p.id).join(",");
-const P=()=>({project_id:PIDS});
+const QG=CONFIG.qualityGrades&&CONFIG.qualityGrades.length&&CONFIG.qualityGrades.length<3?{quality_grade:CONFIG.qualityGrades.join(",")}:{};
+const P=()=>({project_id:PIDS,...QG});
 
 /* ===================== Historische Daten ===================== */
 let HIST=undefined; const histFiles=new Map();
@@ -555,7 +561,7 @@ function loadHistSpecies(id){
   if(!HIST||!HIST.species[id])return Promise.resolve([]);
   if(!histFiles.has(id))histFiles.set(id,fetch(`${CONFIG.historicPath}arten/${id}.json`).then(r=>r.ok?r.json():{r:[]}).then(d=>
     (d.r||[]).map(([y,m,d2,E,N,st,loc])=>{const ll=E&&N?fromLV95(E,N):null;
-      return{y,m:m||0,d:d2||0,lat:ll?.[0],lon:ll?.[1],st:["u","a","e"][st]||"u",src:"h",place:loc||"",date:y?`${y}${m?"-"+String(m).padStart(2,"0"):""}${d2?"-"+String(d2).padStart(2,"0"):""}`:""}})).catch(()=>[]));
+      return{y,m:m||0,d:d2||0,lat:ll?.[0],lon:ll?.[1],st:["u","a","e"][st]||"u",q:true,src:"h",place:loc||"",date:y?`${y}${m?"-"+String(m).padStart(2,"0"):""}${d2?"-"+String(d2).padStart(2,"0"):""}`:""}})).catch(()=>[]));
   return histFiles.get(id);
 }
 
@@ -589,7 +595,7 @@ function photoOf(ph){
 }
 function fromPre(x,fam){
   const ph=x.ph&&okLic(x.ph.l)?{photo:x.ph.u,thumb:x.ph.u.replace("medium","square"),credit:x.ph.c||""}:{photo:null,thumb:null,credit:""};
-  return{id:x.id,name:x.name,de:t(x.de,x.en)||"",count:x.n,inat:x.n,family:fam.get(x.fam)||null,...ph};
+  return{id:x.id,name:x.name,de:t(x.de,x.en)||"",count:x.n,inat:x.n,rq:x.q,family:fam.get(x.fam)||null,...ph};
 }
 async function loadSpecies(){
   if(SPECIES)return SPECIES;
@@ -620,6 +626,19 @@ function norm(x,count,fam){
 async function projYears(){
   if(PROJ_YEARS)return PROJ_YEARS;const p=await pre();
   return PROJ_YEARS=p?.years?yearMap(p.years):yearMap((await api("/observations/histogram",{...P(),interval:"year",date_field:"observed"})).results.year);
+}
+// Jahressummen nur der eigenen Gruppe (Gross- bzw. Kleinschmetterlinge) als Nenner der relativen Häufigkeit
+const GROUP_YEARS={};
+function groupYears(macro){
+  const k=macro?"macro":"micro";
+  return GROUP_YEARS[k]||(GROUP_YEARS[k]=(async()=>{
+    const p=await pre();
+    if(p)return p.years_g?.[k]?yearMap(p.years_g[k]):projYears(); // ältere Datei ohne Gruppen: alle zusammen
+    const fam=await loadFamilies();const ids=[...fam.values()].filter(isMacro).map(f=>f.id).join(",");
+    if(!ids)return projYears();
+    const q=macro?{taxon_id:ids}:{taxon_id:CONFIG.lepidopteraTaxonId,without_taxon_id:ids};
+    return yearMap((await api("/observations/histogram",{...P(),...q,interval:"year",date_field:"observed"})).results.year);
+  })().catch(e=>{delete GROUP_YEARS[k];throw e}));
 }
 function yearMap(o){const m={};Object.entries(o||{}).forEach(([k,v])=>{m[+k.slice(0,4)]=+v});return m}
 async function loadStats(){
@@ -664,7 +683,7 @@ const periodLabel=(m,h)=>t(`${h===1?"Anfang":"Ende"} ${MONTHS_LONG[m-1]}`,`${h==
 const lastDay=m=>new Date(2000,m,0).getDate(); // Schaltjahr, damit der 29. Februar mitzählt
 function periodParams(m,h){const last=lastDay(m),days=[];for(let d=(h===1?1:16);d<=(h===1?15:last);d++)days.push(d);return{month:m,day:days.join(",")}}
 const NARROW=()=>innerWidth<700,TINY=()=>innerWidth<520;
-const SITE=()=>t("Lepidoptera der Region Basiliensis","Lepidoptera of the Regio Basiliensis");
+const SITE=()=>t("Lepidoptera der Region Basiliensis","Lepidoptera of the Region Basiliensis");
 const DEFAULT_DESC=()=>t("Alle Schmetterlingsarten der Region Basel: Artporträts, Verbreitungskarten, Flugzeiten und Fotos aus iNaturalist und historischen Nachweisen.",
   "All butterflies and moths of the Basel region: species accounts, distribution maps, flight periods and photos from iNaturalist and historical records.");
 // Seitentitel, Beschreibung, Ansage für Screenreader und Fokus auf die Überschrift
@@ -688,7 +707,7 @@ function loadLeaflet(){
     add("lib/leaflet/",()=>add("https://unpkg.com/leaflet@1.9.4/dist/"));
   }));
 }
-const inatObsUrl=(extra="")=>`https://www.inaturalist.org/observations?project_id=${encodeURIComponent(PIDS)}${extra}`;
+const inatObsUrl=(extra="")=>`https://www.inaturalist.org/observations?project_id=${encodeURIComponent(PIDS)}${QG.quality_grade?"&quality_grade="+QG.quality_grade:""}${extra}`;
 
 /* Schweizer Landeskoordinaten LV95 (Näherungsformeln swisstopo) für das Kilometerraster */
 function toLV95(lat,lon){const p=(lat*3600-169028.66)/1e4,l=(lon*3600-26782.5)/1e4;
@@ -760,7 +779,7 @@ async function pageHome(){
     <div class="more"><a class="btn ghost" href="${inatObsUrl()}" target="_blank" rel="noopener">${t("Alle auf iNaturalist","All on iNaturalist")}</a></div>
   </section>
   <section>
-    <div class="intro"><h2>${t("Raritäten","Rarities")}</h2><p>${t("Arten mit nur einem oder zwei Nachweisen.","Species with only one or two records.")}</p></div>
+    <div class="intro"><h2>${t("Selten gemeldet","Rarely recorded")}</h2><p>${t("Arten mit nur einem oder zwei Nachweisen, mindestens einer davon bestätigt (Forschungsqualität oder historischer Beleg).","Species with only one or two records, at least one of them confirmed (research grade or historical record).")}</p></div>
     <div class="grid" id="rare">${skel()}</div>
   </section>
   <section class="callout">
@@ -779,8 +798,18 @@ async function pageHome(){
     .catch(e=>$("recent").innerHTML=fail(e));
   try{const sp=await loadSpecies();
     $("rand").innerHTML=shuffle(sp.filter(s=>s.photo)).slice(0,6).map(s=>card(s)).join("");
-    $("rare").innerHTML=shuffle(sp.filter(s=>s.count<=2&&s.photo)).slice(0,6).map(s=>card(s)).join("")||`<div class="msg">${t("Keine.","None.")}</div>`;
+    const rare=await rareSpecies(sp).catch(()=>[]);
+    $("rare").innerHTML=rare.map(s=>card(s)).join("")||`<div class="msg">${t("Keine.","None.")}</div>`;
   }catch(e){$("rand").innerHTML=fail(e);$("rare").innerHTML=""}
+}
+// Selten gemeldet: höchstens 2 Nachweise, davon mindestens einer mit Forschungsqualität oder historisch
+async function rareSpecies(sp){
+  const cand=shuffle(sp.filter(s=>s.count<=2&&s.photo));
+  if(await pre())return cand.filter(s=>s.hist||(s.rq??1)>0).slice(0,6); // ältere Datei ohne «q»: alle
+  const out=cand.filter(s=>s.hist),ask=cand.filter(s=>!s.hist).slice(0,60);
+  if(ask.length){const d=await api("/observations/species_counts",{...P(),quality_grade:"research",taxon_id:ask.map(s=>s.id).join(","),per_page:500});
+    const ok=new Set(d.results.map(r=>r.taxon.id));out.push(...ask.filter(s=>ok.has(s.id)))}
+  return shuffle(out).slice(0,6);
 }
 // Artsuche der Startseite: Vorschläge beim Tippen, Auswahl mit Maus, Finger oder Pfeiltasten + Enter
 function homeSearch(){
@@ -843,7 +872,7 @@ function pageProject(){
   $("app").innerHTML=`${subnav(PROJ_NAV(),"#/projekt")}<article class="prose" style="margin:0 auto">
   <h1 class="h2">${t("Projektbeschrieb","Project description")}</h1>
   <p class="lead">${t("«Lepidoptera der Region Basiliensis» dokumentiert alle Schmetterlingsarten der Region Basel, ihre Verbreitung, Flugzeiten und Veränderungen, und macht die Ergebnisse öffentlich zugänglich.",
-    "“Lepidoptera of the Regio Basiliensis” documents all butterfly and moth species of the Basel region, their distribution, flight periods and changes, and makes the results publicly available.")}</p>
+    "“Lepidoptera of the Region Basiliensis” documents all butterfly and moth species of the Basel region, their distribution, flight periods and changes, and makes the results publicly available.")}</p>
   ${landscapes()}
   <h2 class="h3">${t("Ausgangslage","Background")}</h2>
   <p>${t("Die Region Basel vereint auf kleinem Raum Jura, Schwarzwald, Vogesen und Oberrheinebene. Unterschiedliche Gesteine, Höhenstufen, Expositionen und Nutzungen schaffen eine grosse Vielfalt an Lebensräumen, in der verschiedene biogeografische Grossräume aufeinandertreffen. Gleichzeitig verändern Siedlungsentwicklung, intensivere Landwirtschaft, Waldnutzung und der Klimawandel diese Lebensräume seit langem.",
@@ -884,7 +913,7 @@ function pageProject(){
   <p>Altermatt, F., Fritsch, D., Huber, W. &amp; Whitebread, S. (2006). <i>Die Gross-Schmetterlingsfauna der Region Basel.</i> Entomologische Gesellschaft Basel.</p>
   <p>${t("Weitere Publikationen und Jahresberichte unter","Further publications and annual reports under")} <a href="${u("#/berichte")}">${t("Berichte","Reports")}</a>.</p>
   </article>`;
-  setPage(t("Projektbeschrieb","Project description"),t("Ziele, Methoden und Hintergrund des Projekts «Lepidoptera der Region Basiliensis».","Aims, methods and background of the project “Lepidoptera of the Regio Basiliensis”."));
+  setPage(t("Projektbeschrieb","Project description"),t("Ziele, Methoden und Hintergrund des Projekts «Lepidoptera der Region Basiliensis».","Aims, methods and background of the project “Lepidoptera of the Region Basiliensis”."));
 }
 let areaMap=null;
 async function pageArea(){
@@ -936,19 +965,19 @@ async function pageTaxonomy(){
     <p>${t(`Jeder Punkt ist ein Rasterquadrat von ${CONFIG.gridKm} × ${CONFIG.gridKm} km mit mindestens einem Nachweis. Die Farbe zeigt das Jahr des jüngsten Nachweises: hell für alte, dunkel für neue Nachweise. Ein Klick auf einen Punkt nennt Anzahl, Datum und Fundorte. Bei geschützten Arten macht iNaturalist die Koordinaten unscharf.`,
       `Each dot is a ${CONFIG.gridKm} × ${CONFIG.gridKm} km grid square with at least one record. The colour shows the year of the most recent record: light for old, dark for recent records. Clicking a dot shows the number of records, date and localities. For protected species iNaturalist blurs the coordinates.`)}</p>
     <h3>${t("Phänologie","Phenology")}</h3>
-    <p>${t("Die Balken zeigen, wie viele Nachweise auf jedes Monatsviertel fallen (Q1 = 1.–7., Q2 = 8.–14., Q3 = 15.–21., Q4 = 22.–Monatsende), alle Jahre zusammengefasst. Die Farben unterscheiden Falter, frühe Stadien (Ei, Raupe, Puppe) und Nachweise ohne Angabe. Mehrere Gipfel deuten auf mehrere Generationen hin.",
-      "The bars show how many records fall into each quarter of a month (Q1 = 1st–7th, Q2 = 8th–14th, Q3 = 15th–21st, Q4 = 22nd–end), all years combined. Colours distinguish adults, early stages (egg, larva, pupa) and records without stage. Several peaks suggest several generations.")}</p>
+    <p>${t("Die Balken zeigen, wie viele Nachweise pro Tag auf jedes Monatsviertel fallen (Q1 = 1.–7., Q2 = 8.–14., Q3 = 15.–21., Q4 = 22.–Monatsende), alle Jahre zusammengefasst. Geteilt wird durch die Anzahl Tage, weil das letzte Viertel je nach Monat 7 bis 10 Tage hat. Die Farben unterscheiden Falter, frühe Stadien (Ei, Raupe, Puppe) und Nachweise ohne Angabe. Mehrere Gipfel deuten auf mehrere Generationen hin.",
+      "The bars show how many records per day fall into each quarter of a month (Q1 = 1st–7th, Q2 = 8th–14th, Q3 = 15th–21st, Q4 = 22nd–end), all years combined. Counts are divided by the number of days because the last quarter has 7 to 10 days depending on the month. Colours distinguish adults, early stages (egg, larva, pupa) and records without stage. Several peaks suggest several generations.")}</p>
     <h3>${t("Relative Häufigkeit","Relative frequency")}</h3>
-    <p>${t("Die Linie zeigt den Anteil der Art an allen Nachweisen desselben Jahres. So werden Jahre mit vielen und wenigen Beobachtungen vergleichbar. Die Werte spiegeln die Meldetätigkeit und nicht direkt die Bestandsgrösse; eine Zunahme kann auch bedeuten, dass gezielter nach einer Art gesucht wurde.",
-      "The line shows the species' share of all records in the same year, which makes years with many and few observations comparable. The values reflect recording activity rather than population size; an increase may also mean that the species was searched for more intensively.")}</p>
+    <p>${t(`Die Linie zeigt den Anteil der Art an allen Nachweisen ihrer Gruppe (Gross- bzw. Kleinschmetterlinge) im selben Jahr. So werden Jahre mit vielen und wenigen Beobachtungen vergleichbar, und eine stärkere Meldetätigkeit bei der anderen Gruppe verfälscht den Verlauf nicht. Jahre ohne Nachweise bleiben leer; Jahre mit weniger als ${CONFIG.minYearTotal} Nachweisen der Gruppe sind hell und gestrichelt, weil dort schon ein einzelner Fund den Anteil stark verändert. Die Werte spiegeln die Meldetätigkeit und nicht direkt die Bestandsgrösse; eine Zunahme kann auch bedeuten, dass gezielter nach einer Art gesucht wurde.`,
+      `The line shows the species' share of all records of its group (macro- or micro-moths) in the same year. This makes years with many and few observations comparable, and more intensive recording of the other group does not distort the trend. Years without records are left blank; years with fewer than ${CONFIG.minYearTotal} records of the group are light and dashed, because a single record changes the share considerably there. The values reflect recording activity rather than population size; an increase may also mean that the species was searched for more intensively.`)}</p>
     <h3>${t("Umschalter und Tabellen","Toggles and tables")}</h3>
-    <p>${t(`Über den Diagrammen lässt sich die Datenquelle wählen (alle Daten, nur historische Nachweise oder nur iNaturalist) und der Zeitraum eingrenzen (vor ${CONFIG.splitYear} oder ab ${CONFIG.splitYear}). Unter jedem Diagramm stehen die Werte auch als Tabelle.`,
-      `Above the charts you can choose the data source (all data, historical records only or iNaturalist only) and the period (before ${CONFIG.splitYear} or from ${CONFIG.splitYear}). Below each chart the values are also available as a table.`)}</p>
+    <p>${t(`Über den Diagrammen lässt sich die Datenquelle wählen (alle Daten, nur historische Nachweise oder nur iNaturalist) und der Zeitraum eingrenzen (vor ${CONFIG.splitYear} oder ab ${CONFIG.splitYear}). Die Karte lässt sich auf Beobachtungen mit Forschungsqualität beschränken (von der iNaturalist-Gemeinschaft bestätigt; historische Nachweise gelten als bestätigt). Unter jedem Diagramm stehen die Werte auch als Tabelle.`,
+      `Above the charts you can choose the data source (all data, historical records only or iNaturalist only) and the period (before ${CONFIG.splitYear} or from ${CONFIG.splitYear}). The map can be limited to research-grade observations (confirmed by the iNaturalist community; historical records count as confirmed). Below each chart the values are also available as a table.`)}</p>
     <h3>${t("Datenquellen","Data sources")}</h3>
-    <p>${t("Aktuelle Beobachtungen stammen aus den iNaturalist-Projekten «Macrolepidoptera» und «Microlepidoptera of the Regio Basiliensis» und werden jede Nacht aufbereitet. Historische Nachweise stammen aus Literatur, Sammlungen und der Datenbank des bisherigen Projekts. Die Nomenklatur folgt iNaturalist; ältere Namen werden beim Import zugeordnet.",
-      "Current observations come from the iNaturalist projects “Macrolepidoptera” and “Microlepidoptera of the Regio Basiliensis” and are processed every night. Historical records come from the literature, collections and the database of the previous project. Nomenclature follows iNaturalist; older names are matched during import.")}</p>
+    <p>${t("Aktuelle Beobachtungen stammen aus den iNaturalist-Projekten «Macrolepidoptera» und «Microlepidoptera of the Regio Basiliensis» und werden jede Nacht aufbereitet. Historische Nachweise stammen aus Literatur, Sammlungen und der Datenbank des bisherigen Projekts. Beobachtungen der Stufe «Gelegentlich» (z. B. gezüchtete Tiere, ohne Datum, Ort oder Foto) werden nicht berücksichtigt. Die Nomenklatur folgt iNaturalist; ältere Namen werden beim Import zugeordnet.",
+      "Current observations come from the iNaturalist projects “Macrolepidoptera” and “Microlepidoptera of the Regio Basiliensis” and are processed every night. Historical records come from the literature, collections and the database of the previous project. Observations graded “casual” (e.g. captive animals, or lacking date, location or photo) are not included. Nomenclature follows iNaturalist; older names are matched during import.")}</p>
   </section>`;
-  setPage(t("Taxonomie & Daten","Taxonomy & data"),t("Gross- und Kleinschmetterlinge der Regio Basiliensis, alle Familien und Erklärungen zu Karten und Diagrammen.","Macro- and micro-moths of the Regio Basiliensis, all families and explanations of maps and charts."));
+  setPage(t("Taxonomie & Daten","Taxonomy & data"),t("Gross- und Kleinschmetterlinge der Region Basiliensis, alle Familien und Erklärungen zu Karten und Diagrammen.","Macro- and micro-moths of the Region Basiliensis, all families and explanations of maps and charts."));
   let sp;try{sp=await loadSpecies()}catch(e){$("fams").innerHTML=fail(e);return}
   const fams=new Map();sp.forEach(s=>{if(!s.family)return;const f=fams.get(s.family.id)||{f:s.family,n:0};f.n++;fams.set(s.family.id,f)});
   const list=[...fams.values()].sort((a,b)=>famRank(a.f)-famRank(b.f)||a.f.name.localeCompare(b.f.name));
@@ -973,7 +1002,7 @@ async function pageList(group){
     <label class="sr" for="fam">${t("Familie","Family")}</label><select id="fam"><option value="">${t("Alle Familien","All families")}</option></select>
     <div class="seg" id="view" role="group" aria-label="${t("Ansicht","View")}"><button type="button" data-v="list">${t("Liste","List")}</button><button type="button" data-v="grid">${t("Fotos","Photos")}</button></div>
   </div><div id="list">${loading(t("Lade Artenliste …","Loading species list …"))}</div></section>`;
-  setPage(group?gl[group]:t("Artenliste","Species list"),t("Alle Schmetterlinge der Regio Basiliensis in systematischer Reihenfolge, mit Fotos und Anzahl Nachweisen.","All Lepidoptera of the Regio Basiliensis in systematic order, with photos and number of records."));
+  setPage(group?gl[group]:t("Artenliste","Species list"),t("Alle Schmetterlinge der Region Basiliensis in systematischer Reihenfolge, mit Fotos und Anzahl Nachweisen.","All Lepidoptera of the Region Basiliensis in systematic order, with photos and number of records."));
   let sp;try{sp=await loadSpecies()}catch(e){$("list").innerHTML=fail(e);return}
   if(group)sp=sp.filter(s=>group==="gross"?isMacro(s.family):!isMacro(s.family));
   const fams=[...new Map(sp.filter(s=>s.family).map(s=>[s.family.id,s.family])).values()].sort((a,b)=>famRank(a)-famRank(b)||a.name.localeCompare(b.name));
@@ -1088,13 +1117,13 @@ async function pageSpecies(key){
 
   <section class="chap" id="verbreitung"><h2>${t("Verbreitung","Distribution")}</h2>
     <p class="sub">${t(`Nachweise auf einem ${CONFIG.gridKm}×${CONFIG.gridKm}-km-Raster. Die Farbe zeigt das Jahr des jüngsten Nachweises im Rasterfeld. Die Linie markiert das Untersuchungsgebiet.`,`Records on a ${CONFIG.gridKm}×${CONFIG.gridKm} km grid. The colour shows the year of the latest record in each square. The line marks the study area.`)}</p>
-    <div class="tgs">${srcTg("m")}${toggle("m-time",TIME_OPTS(),"all")}</div>
+    <div class="tgs">${srcTg("m")}${toggle("m-time",TIME_OPTS(),"all")}${toggle("m-q",[["all",t("Alle Nachweise","All records")],["r",t("Nur Forschungsqualität","Research grade only")]],"all")}</div>
     <div id="map" role="region" aria-label="${t("Verbreitungskarte","Distribution map")}"></div>
     <div class="legend">${CONFIG.dateClasses.map((c,i)=>`<span><i style="background:${c.color}"></i>${esc(dateLabel(i))}</span>`).join("")}</div>
     <p class="cnote" id="mapnote"></p>${touchNote()}
   </section>
   <section class="chap" id="phaenologie"><h2>${t("Phänologie","Phenology")}</h2>
-    <p class="sub">${t("Nachweise pro Monatsviertel (Q1 = 1.–7., Q2 = 8.–14., Q3 = 15.–21., Q4 = 22.–Monatsende), alle Jahre zusammengefasst.","Records per quarter-month (Q1 = 1st–7th, Q2 = 8th–14th, Q3 = 15th–21st, Q4 = 22nd–end), all years combined.")}</p>
+    <p class="sub">${t("Nachweise pro Tag im Monatsviertel (Q1 = 1.–7., Q2 = 8.–14., Q3 = 15.–21., Q4 = 22.–Monatsende), alle Jahre zusammengefasst. Weil Q4 je nach Monat 7 bis 10 Tage hat, wird durch die Anzahl Tage geteilt; die Tabelle zeigt die Anzahl Nachweise.","Records per day in each quarter-month (Q1 = 1st–7th, Q2 = 8th–14th, Q3 = 15th–21st, Q4 = 22nd–end), all years combined. As Q4 has 7 to 10 days depending on the month, counts are divided by the number of days; the table shows the number of records.")}</p>
     <div class="tgs">${srcTg("p")}${toggle("p-time",TIME_OPTS(),"all")}</div>
     <div class="chart" id="phen">${loading()}</div>
     <div class="legend">${STAGES.map(z=>`<span><i style="background:${z.c}"></i>${esc(z.l)}</span>`).join("")}</div>
@@ -1102,15 +1131,16 @@ async function pageSpecies(key){
     <details class="dtab"><summary>${t("Daten als Tabelle","Data as table")}</summary><div class="tbl" id="phentab"></div></details>
   </section>
   <section class="chap" id="haeufigkeit"><h2>${t("Relative Häufigkeit","Relative frequency")}</h2>
-    <p class="sub">${t("Anteil dieser Art an allen Nachweisen desselben Jahres. So werden Jahre mit vielen und wenigen Beobachtungen vergleichbar. Alternativ lässt sich die Anzahl Nachweise pro Jahr anzeigen.","Share of this species in all records of the same year, which makes years with many and few observations comparable. Alternatively, show the number of records per year.")}</p>
+    <p class="sub">${t(`Anteil dieser Art an allen Nachweisen der ${grp||t("Schmetterlinge","Lepidoptera")} desselben Jahres. So werden Jahre mit vielen und wenigen Beobachtungen vergleichbar. Jahre ohne Nachweise bleiben leer. Alternativ lässt sich die Anzahl Nachweise pro Jahr anzeigen.`,`Share of this species in all records of ${grp?grp.toLowerCase():"Lepidoptera"} in the same year, which makes years with many and few observations comparable. Years without records are left blank. Alternatively, show the number of records per year.`)}</p>
     <div class="tgs">${srcTg("r")}${toggle("r-mode",[["pct",t("Relative Häufigkeit (%)","Relative frequency (%)")],["n",t("Anzahl Nachweise","Number of records")]],"pct")}</div>
     <div class="chart" id="rate">${loading()}</div>
+    <div class="legend" id="ratelegend"><span><svg width="28" height="10" aria-hidden="true"><line x1="1" x2="27" y1="5" y2="5" stroke="${LINE_COLOR}" stroke-width="2.5"/></svg>${t(`ab ${CONFIG.minYearTotal} Nachweisen im Jahr`,`${CONFIG.minYearTotal} or more records in the year`)}</span><span><svg width="28" height="10" aria-hidden="true"><line x1="1" x2="27" y1="5" y2="5" stroke="${LINE_COLOR}" stroke-width="2" stroke-dasharray="4 3" opacity=".55"/></svg>${t(`wenig Daten (unter ${CONFIG.minYearTotal})`,`few data (under ${CONFIG.minYearTotal})`)}</span></div>
     <details class="dtab"><summary>${t("Daten als Tabelle","Data as table")}</summary><div class="tbl" id="ratetab"></div></details>
   </section>
   <section class="chap" id="fotos"><h2>${t("Fotos","Photos")}</h2><p class="sub">${t("Fotos aus iNaturalist mit Creative-Commons-Lizenz. Ein Klick öffnet die Beobachtung.","Photos from iNaturalist with a Creative Commons licence. Click to open the observation.")}</p><div class="gallery" id="gal">${loading()}</div></section>
   <section class="chap"><h2>${t("Neueste Beobachtungen","Latest records")}</h2><div class="tbl" id="recs">${loading()}</div></section>
   <p class="kbd">${t("Tipp: Mit den Pfeiltasten ← → wechselst du zwischen den Arten.","Tip: use the arrow keys ← → to move between species.")}</p>`;
-  setPage(de?`${name} (${de})`:name,t(`${name}${de?" ("+de+")":""}: Verbreitungskarte, Flugzeit, Häufigkeit und Fotos aus der Regio Basiliensis.`,`${name}${de?" ("+de+")":""}: distribution map, flight period, frequency and photos from the Regio Basiliensis.`));
+  setPage(de?`${name} (${de})`:name,t(`${name}${de?" ("+de+")":""}: Verbreitungskarte, Flugzeit, Häufigkeit und Fotos aus der Region Basiliensis.`,`${name}${de?" ("+de+")":""}: distribution map, flight period, frequency and photos from the Region Basiliensis.`));
   if(START===""&&s&&String(key)!==s.slug)history.replaceState(null,"",u("#/art/"+s.slug));
 
   document.querySelectorAll(".ql button").forEach(b=>b.onclick=()=>$(b.dataset.go).scrollIntoView({behavior:matchMedia("(prefers-reduced-motion:reduce)").matches?"auto":"smooth"}));
@@ -1139,9 +1169,9 @@ async function pageSpecies(key){
 
   const trunc=iData.total>iData.recs.length?t(` Von ${fmt(iData.total)} iNaturalist-Beobachtungen sind die neuesten ${fmt(iData.recs.length)} berücksichtigt.`,` Of ${fmt(iData.total)} iNaturalist records, the latest ${fmt(iData.recs.length)} are included.`):"";
   // Karte
-  const ms={src:"all",time:"all"};
-  const drawMap=()=>{if(map)drawGrid(filt(all,ms.src,ms.time),trunc)};
-  bindToggle("m-src",v=>{ms.src=v;drawMap()});bindToggle("m-time",v=>{ms.time=v;drawMap()});drawMap();
+  const ms={src:"all",time:"all",q:"all"};
+  const drawMap=()=>{if(map)drawGrid(filt(all,ms.src,ms.time).filter(r=>ms.q==="all"||r.q!==false),trunc)};
+  bindToggle("m-src",v=>{ms.src=v;drawMap()});bindToggle("m-time",v=>{ms.time=v;drawMap()});bindToggle("m-q",v=>{ms.q=v;drawMap()});drawMap();
   // Phänologie
   const ps={src:"all",time:"all"};
   const drawPhen=()=>{const recs=filt(all,ps.src,ps.time);const rows=Array.from({length:48},()=>[0,0,0]);let skipped=0;
@@ -1153,18 +1183,21 @@ async function pageSpecies(key){
   const rs={src:"all",mode:"pct"};
   const [iYearsSp,iYearsAll]=await Promise.all([
     iData.years?Promise.resolve(yearMap(iData.years)):api("/observations/histogram",{...P(),taxon_id:id,interval:"year",date_field:"observed"}).then(d=>yearMap(d.results.year)).catch(()=>({})),
-    projYears().catch(()=>({}))]);
+    (fam?groupYears(isMacro(fam)):projYears()).catch(()=>projYears()).catch(()=>({}))]);
   if(!alive())return;
   const hYearsSp={};hRecs.forEach(r=>{if(r.y)hYearsSp[r.y]=(hYearsSp[r.y]||0)+1});
-  const hYearsAll=hist?.years?Object.fromEntries(Object.entries(hist.years).map(([k,v])=>[+k,v])):{};
+  const hy=(fam&&hist?.years_g?.[isMacro(fam)?"macro":"micro"])||hist?.years;
+  const hYearsAll=hy?Object.fromEntries(Object.entries(hy).map(([k,v])=>[+k,v])):{};
   const drawRate=()=>{
     const spc={},tot={};const add=(o,src)=>Object.entries(src).forEach(([k,v])=>o[k]=(o[k]||0)+v);
     if(rs.src!=="h"){add(spc,iYearsSp);add(tot,iYearsAll)}
     if(rs.src!=="i"){add(spc,hYearsSp);add(tot,hYearsAll)}
-    const ys=Object.keys(tot).map(Number).filter(y=>y>=1800);
-    const y0=Math.min(1950,...(ys.length?ys:[1950])),pts=[];
-    for(let y=y0;y<=THIS_YEAR;y++){const n=spc[y]||0,T=tot[y]||0;pts.push([y,rs.mode==="pct"?(T?n/T*100:0):n,n,T])}
-    $("rate").innerHTML=lineChart(pts,rs.mode==="pct");$("ratetab").innerHTML=rateTable(pts);
+    // Beginn beim ersten Jahr mit Daten; Jahre ohne Daten bleiben als Lücke (null) statt 0 %
+    const ys=Object.keys(tot).map(Number).filter(y=>y>=1800&&y<=THIS_YEAR&&tot[y]>0),pts=[],pct=rs.mode==="pct";
+    $("ratelegend").hidden=!pct;
+    if(!ys.length){$("rate").innerHTML=`<div class="msg">${t("Keine Nachweise mit Jahresangabe.","No records with a year.")}</div>`;$("ratetab").innerHTML="";return}
+    for(let y=Math.min(...ys);y<=THIS_YEAR;y++){const n=spc[y]||0,T=tot[y]||0;pts.push([y,T?(pct?n/T*100:n):null,n,T,pct&&T>0&&T<CONFIG.minYearTotal])}
+    $("rate").innerHTML=lineChart(pts,pct);$("ratetab").innerHTML=rateTable(pts);
   };
   bindToggle("r-src",v=>{rs.src=v;drawRate()});bindToggle("r-mode",v=>{rs.mode=v;drawRate()});drawRate();
   redrawCharts=()=>{if(alive()&&$("phen")){drawPhen();drawRate()}};
@@ -1175,7 +1208,7 @@ function obsToRec(o){
   const [y,m,d]=(o.observed_on||"").split("-").map(Number);const c=o.geojson?.coordinates;
   const ann=(o.annotations||[]).find(a=>a.controlled_attribute_id===1);
   const v=ann?.controlled_value_id;const st=v===2?"a":[4,5,6,7,8].includes(v)?"e":"u";
-  return{y:y||0,m:m||0,d:d||0,lat:c?.[1],lon:c?.[0],st,src:"i",place:o.place_guess||"",date:o.observed_on||"",uri:o.uri};
+  return{y:y||0,m:m||0,d:d||0,lat:c?.[1],lon:c?.[0],st,q:o.quality_grade==="research",src:"i",place:o.place_guess||"",date:o.observed_on||"",uri:o.uri};
 }
 const OBS_URL="https://www.inaturalist.org/observations/";
 // iNat-Daten einer Art: vorberechnete Datei (alle Beobachtungen) oder live (bis maxObs)
@@ -1185,7 +1218,7 @@ async function loadInat(id){
   const d=z?await getJSON(`${CONFIG.inatPath}arten/${id}.json`):null;
   if(d){const pad=n=>String(n).padStart(2,"0");
     return{complete:true,total:d.r.length,years:d.y||null,
-      recs:d.r.map(([y,m,dd,lat,lon,st,place,oid])=>({y,m,d:dd,lat,lon,st:"uae"[st]||"u",src:"i",place:place||"",
+      recs:d.r.map(([y,m,dd,lat,lon,st,place,oid,q])=>({y,m,d:dd,lat,lon,st:"uae"[st]||"u",q:q===undefined?null:!!q,src:"i",place:place||"",
         date:y&&m&&dd?`${y}-${pad(m)}-${pad(dd)}`:"",uri:oid?OBS_URL+oid:""})),
       gallery:(d.f||[]).filter(f=>okLic(f.l)).map(f=>({url:f.u,credit:f.c,uri:OBS_URL+f.o,date:f.d,user:f.n})),
       table:(d.t||[]).map(o=>({date:o.d,place:o.p,user:o.n,q:o.q,uri:OBS_URL+o.o}))};
@@ -1229,7 +1262,7 @@ async function pageFamily(key){
     const grp=f?(isMacro(f)?["#/arten/gross",t("Grossschmetterlinge","Macro-moths")]:["#/arten/klein",t("Kleinschmetterlinge","Micro-moths")]):null;
     $("app").innerHTML=`<p class="crumb"><a href="${u("#/taxonomie")}">${t("Taxonomie & Daten","Taxonomy & data")}</a> › ${grp?`<a href="${u(grp[0])}">${grp[1]}</a> › `:""}${esc(f?.name||"")}</p><section><div class="intro"><h1>${esc(f?.name||t("Familie","Family"))}</h1><p>${f?.de?esc(f.de)+" · ":""}${arten(items.length)}</p></div>
     <div class="grid">${items.map(s=>card(s)).join("")||`<div class="msg">${t("Keine Arten.","No species.")}</div>`}</div></section>`;
-    setPage(f?`${f.name}${f.de?" ("+f.de+")":""}`:t("Familie","Family"),f?t(`Alle ${items.length} Arten der Familie ${f.name} in der Regio Basiliensis.`,`All ${items.length} species of the family ${f.name} in the Regio Basiliensis.`):"");
+    setPage(f?`${f.name}${f.de?" ("+f.de+")":""}`:t("Familie","Family"),f?t(`Alle ${items.length} Arten der Familie ${f.name} in der Region Basiliensis.`,`All ${items.length} species of the family ${f.name} in the Region Basiliensis.`):"");
   }catch(e){$("app").innerHTML=fail(e)}
 }
 
@@ -1240,16 +1273,21 @@ function niceStep(max,n=6,int=false){if(max<=0)return 1;const raw=max/n,p=Math.p
 function axisY(max,int=false,n=6){const step=niceStep(max,n,int);const top=Math.max(step,Math.ceil(max/step)*step);const v=[];for(let x=0;x<=top+1e-9;x+=step)v.push(+x.toFixed(6));return{top,t:v}}
 const lbl=(v,pct)=>pct?+v.toFixed(3)+" %":fmt(+v.toFixed(1));
 
+// Tage eines Monatsviertels (Q4 = 22.–Monatsende, Februar mit 29. Februar)
+const slotDays=i=>(i&3)<3?7:lastDay((i>>2)+1)-21;
+const lblDay=v=>fmt(+v.toFixed(v<1?2:1));
 function phenChart(rows){
   const nar=NARROW(),tiny=TINY(),W=tiny?420:nar?700:1100,H=tiny?290:nar?340:420,Lm=tiny?38:56,R=tiny?6:12,T=18,B=tiny?30:nar?40:74,iw=W-Lm-R,ih=H-T-B,slot=iw/48,bw=slot*0.78;
-  const sums=rows.map(r=>r.reduce((a,b)=>a+b,0));const {top,t:ticks}=axisY(Math.max(1,...sums),true,tiny?4:6);const y=v=>T+ih-(v/top)*ih;
-  const total=sums.reduce((a,b)=>a+b,0),pk=sums.indexOf(Math.max(...sums));
-  const summary=total?t(`Phänologie: ${fmt(total)} Nachweise, die meisten im ${MONTHS_LONG[pk>>2]} (Viertel ${(pk&3)+1}). Werte in der Tabelle darunter.`,`Phenology: ${fmt(total)} records, most in ${MONTHS_LONG[pk>>2]} (quarter ${(pk&3)+1}). Values in the table below.`):t("Phänologie: keine Nachweise mit genauem Datum.","Phenology: no records with exact date.");
+  // Balkenhöhe = Nachweise pro Tag, damit das längere letzte Monatsviertel nicht überhöht ist
+  const sums=rows.map(r=>r.reduce((a,b)=>a+b,0)),rate=sums.map((n,i)=>n/slotDays(i));
+  const {top,t:ticks}=axisY(Math.max(1/7,...rate),false,tiny?4:6);const y=v=>T+ih-(v/top)*ih;
+  const total=sums.reduce((a,b)=>a+b,0),pk=rate.indexOf(Math.max(...rate));
+  const summary=total?t(`Phänologie: ${fmt(total)} Nachweise, die meisten pro Tag im ${MONTHS_LONG[pk>>2]} (Viertel ${(pk&3)+1}). Werte in der Tabelle darunter.`,`Phenology: ${fmt(total)} records, most per day in ${MONTHS_LONG[pk>>2]} (quarter ${(pk&3)+1}). Values in the table below.`):t("Phänologie: keine Nachweise mit genauem Datum.","Phenology: no records with exact date.");
   let s=`<svg viewBox="0 0 ${W} ${H}"${tiny?' class="tiny"':""} role="img" aria-label="${esc(summary)}">`;
-  ticks.forEach(v=>{s+=`<line x1="${Lm}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="#e6e6e6"/><text x="${Lm-(tiny?7:12)}" y="${y(v)+(tiny?4:5)}" text-anchor="end">${lbl(v)}</text>`});
-  rows.forEach((r,i)=>{const x=Lm+i*slot;const name=`${MONTHS[i>>2]} Q${(i&3)+1}`;
-    let acc=0,g="";r.forEach((v,j)=>{if(v<=0)return;const y1=y(acc+v),y0=y(acc);acc+=v;g+=`<rect x="${(x+(slot-bw)/2).toFixed(1)}" y="${y1.toFixed(1)}" width="${bw.toFixed(1)}" height="${(y0-y1).toFixed(1)}" fill="${STAGES[j].c}"/>`});
-    const tip=`<b>${name}</b><br>`+STAGES.map((z,j)=>r[j]?`<i style="background:${z.c}"></i>${esc(z.l)}: <b>${r[j]}</b>`:"").filter(Boolean).join("<br>")+(sums[i]?`<br>Total: <b>${sums[i]}</b>`:"");
+  ticks.forEach(v=>{s+=`<line x1="${Lm}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="#e6e6e6"/><text x="${Lm-(tiny?7:12)}" y="${y(v)+(tiny?4:5)}" text-anchor="end">${lblDay(v)}</text>`});
+  rows.forEach((r,i)=>{const x=Lm+i*slot,dd=slotDays(i);const name=`${MONTHS[i>>2]} Q${(i&3)+1}`;
+    let acc=0,g="";r.forEach((n,j)=>{if(n<=0)return;const v=n/dd,y1=y(acc+v),y0=y(acc);acc+=v;g+=`<rect x="${(x+(slot-bw)/2).toFixed(1)}" y="${y1.toFixed(1)}" width="${bw.toFixed(1)}" height="${(y0-y1).toFixed(1)}" fill="${STAGES[j].c}"/>`});
+    const tip=`<b>${name}</b> <span style="color:#777">(${t(`${dd} Tage`,`${dd} days`)})</span><br>`+STAGES.map((z,j)=>r[j]?`<i style="background:${z.c}"></i>${esc(z.l)}: <b>${r[j]}</b>`:"").filter(Boolean).join("<br>")+(sums[i]?`<br>Total: <b>${sums[i]}</b> · ${t("pro Tag","per day")}: <b>${lblDay(rate[i])}</b>`:"");
     s+=`<g class="bargrp" data-tip="${esc(tip)}">${g}<rect class="hit" x="${x}" y="${T}" width="${slot}" height="${ih}"/></g>`;
     if(!nar||!(i&3))s+=`<line x1="${x}" x2="${x}" y1="${T+ih}" y2="${T+ih+5}" stroke="#ccd6eb"/>`;
     if(nar){if(!(i&3))s+=`<text x="${(x+slot*2).toFixed(1)}" y="${T+ih+(tiny?19:24)}" text-anchor="middle">${MONTHS[i>>2]}</text>`}
@@ -1258,36 +1296,44 @@ function phenChart(rows){
   return s+"</svg>";
 }
 function phenTable(rows){
-  const body=rows.map((r,i)=>{const n=r[0]+r[1]+r[2];return n?`<tr><td>${MONTHS_LONG[i>>2]} Q${(i&3)+1}</td>${r.map(v=>`<td class="num">${v}</td>`).join("")}<td class="num"><b>${n}</b></td></tr>`:""}).join("");
-  return body?`<table><thead><tr><th scope="col">${t("Monatsviertel","Quarter-month")}</th>${STAGES.map(z=>`<th scope="col" class="num">${esc(z.l)}</th>`).join("")}<th scope="col" class="num">Total</th></tr></thead><tbody>${body}</tbody></table>`:`<p class="cnote">${t("Keine Nachweise mit genauem Datum.","No records with exact date.")}</p>`;
+  const body=rows.map((r,i)=>{const n=r[0]+r[1]+r[2];return n?`<tr><td>${MONTHS_LONG[i>>2]} Q${(i&3)+1}</td>${r.map(v=>`<td class="num">${v}</td>`).join("")}<td class="num"><b>${n}</b></td><td class="num">${lblDay(n/slotDays(i))}</td></tr>`:""}).join("");
+  return body?`<table><thead><tr><th scope="col">${t("Monatsviertel","Quarter-month")}</th>${STAGES.map(z=>`<th scope="col" class="num">${esc(z.l)}</th>`).join("")}<th scope="col" class="num">Total</th><th scope="col" class="num">${t("pro Tag","per day")}</th></tr></thead><tbody>${body}</tbody></table>`:`<p class="cnote">${t("Keine Nachweise mit genauem Datum.","No records with exact date.")}</p>`;
 }
 function rateTable(pts){
-  const body=pts.filter(p=>p[3]).reverse().map(([yr,,n,T])=>`<tr><td>${yr}</td><td class="num">${n}</td><td class="num">${fmt(T)}</td><td class="num">${(n/T*100).toFixed(2)} %</td></tr>`).join("");
-  return body?`<table><thead><tr><th scope="col">${t("Jahr","Year")}</th><th scope="col" class="num">${t("Nachweise der Art","Records of species")}</th><th scope="col" class="num">${t("Nachweise insgesamt","All records")}</th><th scope="col" class="num">${t("Relative Häufigkeit","Relative frequency")}</th></tr></thead><tbody>${body}</tbody></table>`:`<p class="cnote">${t("Keine Nachweise.","No records.")}</p>`;
+  const few=t("wenig Daten","few data");
+  const body=pts.filter(p=>p[3]).reverse().map(([yr,,n,T,low])=>`<tr><td>${yr}${low?` <span style="color:var(--muted);font-size:var(--t-xs)">· ${few}</span>`:""}</td><td class="num">${n}</td><td class="num">${fmt(T)}</td><td class="num">${(n/T*100).toFixed(2)} %</td></tr>`).join("");
+  return body?`<table><thead><tr><th scope="col">${t("Jahr","Year")}</th><th scope="col" class="num">${t("Nachweise der Art","Records of species")}</th><th scope="col" class="num">${t("Nachweise der Gruppe","Records of the group")}</th><th scope="col" class="num">${t("Relative Häufigkeit","Relative frequency")}</th></tr></thead><tbody>${body}</tbody></table>`:`<p class="cnote">${t("Keine Nachweise.","No records.")}</p>`;
 }
-// Monotone kubische Interpolation (glatte Linie ohne Überschwinger unter 0)
-function smoothPath(p){
-  const n=p.length;if(n<2)return"";const dx=[],dy=[],m=[],tg=[];
+// Monotone kubische Interpolation (glatte Linie ohne Überschwinger unter 0); ein Pfadstück pro Abschnitt
+function smoothSegs(p){
+  const n=p.length;if(n<2)return[];const dx=[],dy=[],m=[],tg=[],out=[];
   for(let i=0;i<n-1;i++){dx[i]=p[i+1][0]-p[i][0];dy[i]=p[i+1][1]-p[i][1];m[i]=dy[i]/dx[i]}
   tg[0]=m[0];tg[n-1]=m[n-2];for(let i=1;i<n-1;i++)tg[i]=m[i-1]*m[i]<=0?0:3*(dx[i-1]+dx[i])/((2*dx[i]+dx[i-1])/m[i-1]+(dx[i]+2*dx[i-1])/m[i]);
-  let d=`M${p[0][0].toFixed(1)},${p[0][1].toFixed(1)}`;
-  for(let i=0;i<n-1;i++){const h=dx[i]/3;d+=`C${(p[i][0]+h).toFixed(1)},${(p[i][1]+tg[i]*h).toFixed(1)} ${(p[i+1][0]-h).toFixed(1)},${(p[i+1][1]-tg[i+1]*h).toFixed(1)} ${p[i+1][0].toFixed(1)},${p[i+1][1].toFixed(1)}`}
-  return d;
+  const f=v=>v.toFixed(1);
+  for(let i=0;i<n-1;i++){const h=dx[i]/3;out.push(`M${f(p[i][0])},${f(p[i][1])}C${f(p[i][0]+h)},${f(p[i][1]+tg[i]*h)} ${f(p[i+1][0]-h)},${f(p[i+1][1]-tg[i+1]*h)} ${f(p[i+1][0])},${f(p[i+1][1])}`)}
+  return out;
 }
-function lineChart(pts,pct){ // [jahr, wert, n Art, n total]
+function lineChart(pts,pct){ // [jahr, wert (null = keine Daten), n Art, n Gruppe, wenig Daten]
   const nar=NARROW(),tiny=TINY(),W=tiny?420:nar?700:1100,H=tiny?290:nar?340:400,Lm=tiny?50:64,R=tiny?10:18,T=18,B=tiny?48:62,iw=W-Lm-R,ih=H-T-B,n=pts.length;
-  const {top,t:ticks}=axisY(Math.max(pct?0.01:1,...pts.map(p=>p[1])),!pct,tiny?4:6);const y=v=>T+ih-(v/top)*ih;const x=i=>Lm+(n>1?i*iw/(n-1):iw/2);
+  const vals=pts.filter(p=>p[1]!=null);
+  const {top,t:ticks}=axisY(Math.max(pct?0.01:1,...vals.map(p=>p[1])),!pct,tiny?4:6);const y=v=>T+ih-(v/top)*ih;const x=i=>Lm+(n>1?i*iw/(n-1):iw/2);
   const span=n-1,step=tiny?(span<=20?2:span<=45?5:span<=100?10:25):nar?(span<=40?5:span<=100?10:20):(span<=80?2:span<=130?5:10);
-  const pk=pts.reduce((a,p)=>p[1]>a[1]?p:a,pts[0]);
+  const pk=vals.reduce((a,p)=>p[1]>a[1]?p:a,vals[0]);
   const summary=t(`${pct?"Relative Häufigkeit":"Nachweise"} pro Jahr von ${pts[0][0]} bis ${pts[n-1][0]}`,`${pct?"Relative frequency":"Records"} per year from ${pts[0][0]} to ${pts[n-1][0]}`)+(pk[1]>0?t(`, höchster Wert ${pk[0]} mit ${pct?pk[1].toFixed(2)+" %":pk[2]+" Nachweisen"}`,`, highest in ${pk[0]} with ${pct?pk[1].toFixed(2)+" %":pk[2]+" records"}`):"")+t(". Werte in der Tabelle darunter.",". Values in the table below.");
   let s=`<svg viewBox="0 0 ${W} ${H}"${tiny?' class="tiny"':""} role="img" aria-label="${esc(summary)}">`;
   ticks.forEach(v=>{s+=`<line x1="${Lm}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="#e6e6e6"/><text x="${Lm-(tiny?7:12)}" y="${y(v)+(tiny?4:5)}" text-anchor="end">${lbl(v,pct)}</text>`});
   s+=`<line x1="${Lm}" x2="${W-R}" y1="${T+ih}" y2="${T+ih}" stroke="#ccd6eb"/>`;
   pts.forEach(([yr],i)=>{if((yr-pts[0][0])%step===0||(i===n-1&&(yr-pts[0][0])%step>=step/2)){s+=`<line x1="${x(i)}" x2="${x(i)}" y1="${T+ih}" y2="${T+ih+5}" stroke="#ccd6eb"/><text transform="translate(${(x(i)+5).toFixed(1)} ${T+ih+16}) rotate(-45)" text-anchor="end">${yr}</text>`}});
-  s+=`<path d="${smoothPath(pts.map((p,i)=>[x(i),y(p[1])]))}" fill="none" stroke="${LINE_COLOR}" stroke-width="2.5" stroke-linejoin="round"/>`;
+  // Linie in Abschnitten ohne Lücke; Abschnitte zu Jahren mit wenig Daten hell und gestrichelt
+  const solid=`stroke="${LINE_COLOR}" stroke-width="2.5"`,weak=`stroke="${LINE_COLOR}" stroke-width="2" stroke-dasharray="4 3" opacity=".55"`;
+  let run=[];
+  const flush=()=>{if(run.length===1){const i=run[0];s+=`<circle cx="${x(i).toFixed(1)}" cy="${y(pts[i][1]).toFixed(1)}" r="3" fill="${LINE_COLOR}"${pts[i][4]?' opacity=".55"':""}/>`}
+    else smoothSegs(run.map(i=>[x(i),y(pts[i][1])])).forEach((d,k)=>{const lo=pts[run[k]][4]||pts[run[k+1]][4];s+=`<path d="${d}" fill="none" ${lo?weak:solid} stroke-linejoin="round" stroke-linecap="round"/>`});
+    run=[]};
+  pts.forEach((p,i)=>{if(p[1]==null)flush();else run.push(i)});flush();
   const hw=n>1?iw/(n-1):iw;
-  pts.forEach(([yr,v,ns,nt],i)=>{const tip=`<b>${yr}</b><br><i style="background:${LINE_COLOR}"></i>${!nt?t("Keine Nachweise aus diesem Jahr","No records from this year"):pct?t(`Relative Häufigkeit: <b>${v.toFixed(2)} %</b><br>${fmt(ns)} von ${nt===1?"1 Nachweis":fmt(nt)+" Nachweisen"}`,`Relative frequency: <b>${v.toFixed(2)} %</b><br>${fmt(ns)} of ${nt===1?"1 record":fmt(nt)+" records"}`):t(`Nachweise: <b>${ns}</b>`,`Records: <b>${ns}</b>`)}`;
-    s+=`<g class="bargrp" data-tip="${esc(tip)}" data-cx="${x(i).toFixed(1)}" data-cy="${y(v).toFixed(1)}"><rect class="hit" x="${(x(i)-hw/2).toFixed(1)}" y="${T}" width="${hw.toFixed(1)}" height="${ih}"/></g>`});
+  pts.forEach(([yr,v,ns,nt,low],i)=>{const tip=`<b>${yr}</b><br><i style="background:${LINE_COLOR}"></i>${!nt?t("Keine Nachweise aus diesem Jahr","No records from this year"):pct?t(`Relative Häufigkeit: <b>${v.toFixed(2)} %</b><br>${fmt(ns)} von ${nt===1?"1 Nachweis":fmt(nt)+" Nachweisen"}`,`Relative frequency: <b>${v.toFixed(2)} %</b><br>${fmt(ns)} of ${nt===1?"1 record":fmt(nt)+" records"}`):t(`Nachweise: <b>${ns}</b>`,`Records: <b>${ns}</b>`)}${low?`<br><span style="color:#777">${t(`Wenig Daten (unter ${CONFIG.minYearTotal} Nachweisen der Gruppe)`,`Few data (under ${CONFIG.minYearTotal} records of the group)`)}</span>`:""}`;
+    s+=`<g class="bargrp" data-tip="${esc(tip)}"${v!=null?` data-cx="${x(i).toFixed(1)}" data-cy="${y(v).toFixed(1)}"`:""}><rect class="hit" x="${(x(i)-hw/2).toFixed(1)}" y="${T}" width="${hw.toFixed(1)}" height="${ih}"/></g>`});
   s+=`<circle class="dotm" r="4.5" cx="-20" cy="-20" fill="${LINE_COLOR}" stroke="#fff" stroke-width="1.5" style="pointer-events:none"/>`;
   return s+"</svg>";
 }
@@ -1298,7 +1344,7 @@ function showTip(g,cx,cy){
   tipEl.innerHTML=g.dataset.tip;tipEl.hidden=false;
   const w=tipEl.offsetWidth,h=tipEl.offsetHeight;let x=cx+14,y=cy-h-10;
   if(x+w>innerWidth-8)x=cx-w-14;if(x<8)x=8;if(y<8)y=cy+16;tipEl.style.left=x+"px";tipEl.style.top=y+"px";
-  if(g.dataset.cx){const c=g.ownerSVGElement.querySelector(".dotm");c.setAttribute("cx",g.dataset.cx);c.setAttribute("cy",g.dataset.cy)}
+  const c=g.ownerSVGElement.querySelector(".dotm");if(c){c.setAttribute("cx",g.dataset.cx||-20);c.setAttribute("cy",g.dataset.cy||-20)}
 }
 document.addEventListener("pointermove",e=>{if(e.pointerType!=="mouse")return;
   const g=e.target.closest&&e.target.closest(".chart .bargrp");g?showTip(g,e.clientX,e.clientY):hideTip()});
@@ -1314,7 +1360,7 @@ function pageReports(){
   <p class="lead">${t("Publikationen, Jahresberichte und weitere Dokumente aus dem Projekt und seinem Vorgänger.","Publications, annual reports and further documents from the project and its predecessor.")}</p>
   ${typ.map(([k,l])=>{const a=R.filter(r=>r.typ===k);return `<h2 class="h3">${l}</h2>`+(a.length?`<ul class="reports">${a.map(r=>`<li><span class="yr">${esc(r.jahr||"")}</span><div>${r.autoren?esc(r.autoren)+" ":""}<b>${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(tx(r.titel))}</a>`:esc(tx(r.titel))}</b>${r.quelle?`. ${esc(r.quelle)}`:""}.</div></li>`).join("")}</ul>`:`<p class="cnote" style="text-align:left">${t("Folgt.","Coming soon.")}</p>`)}).join("")}
   </section>`;
-  setPage(t("Berichte","Reports"),t("Publikationen, Jahresberichte und weitere Dokumente zu den Schmetterlingen der Regio Basiliensis.","Publications, annual reports and further documents on the Lepidoptera of the Regio Basiliensis."));
+  setPage(t("Berichte","Reports"),t("Publikationen, Jahresberichte und weitere Dokumente zu den Schmetterlingen der Region Basiliensis.","Publications, annual reports and further documents on the Lepidoptera of the Region Basiliensis."));
 }
 
 /* ===================== Mitmachen ===================== */
@@ -1355,7 +1401,7 @@ function pageContact(){
   <p>${t(`Auf iNaturalist erreichst du uns über die Projektseiten <a href="https://www.inaturalist.org/projects/${CONFIG.projects[0].slug}" target="_blank" rel="noopener">Macrolepidoptera</a> und <a href="https://www.inaturalist.org/projects/${CONFIG.projects[1].slug}" target="_blank" rel="noopener">Microlepidoptera</a>.`,
     `On iNaturalist you can reach us via the project pages <a href="https://www.inaturalist.org/projects/${CONFIG.projects[0].slug}" target="_blank" rel="noopener">Macrolepidoptera</a> and <a href="https://www.inaturalist.org/projects/${CONFIG.projects[1].slug}" target="_blank" rel="noopener">Microlepidoptera</a>.`)}</p>
   </section>`;
-  setPage(t("Kontakt","Contact"),t("Kontakt und Projektleitung von «Lepidoptera der Region Basiliensis».","Contact and project team of “Lepidoptera of the Regio Basiliensis”."));
+  setPage(t("Kontakt","Contact"),t("Kontakt und Projektleitung von «Lepidoptera der Region Basiliensis».","Contact and project team of “Lepidoptera of the Region Basiliensis”."));
 }
 
 /* ===================== Impressum ===================== */
@@ -1378,7 +1424,7 @@ function pageImpressum(){
   <p>${t("Im Browser werden nur Einstellungen der Artenliste (Suche, Ansicht) sowie für eine Stunde zwischengespeicherte iNaturalist-Antworten abgelegt. Diese Daten verlassen deinen Browser nicht.","Your browser stores only species list settings (search, view) and iNaturalist responses cached for one hour. This data never leaves your browser.")}</p>
   <h2 class="h3">${t("Haftung für Links","Liability for links")}</h2>
   <p>${t("Für die Inhalte verlinkter externer Seiten sind ausschliesslich deren Betreiber verantwortlich.","The operators of linked external sites are solely responsible for their content.")}</p></section>`;
-  setPage(t("Impressum & Datenschutz","Legal notice & privacy"),t("Impressum und Datenschutzhinweise der Website «Lepidoptera der Region Basiliensis».","Legal notice and privacy information of the website “Lepidoptera of the Regio Basiliensis”."));
+  setPage(t("Impressum & Datenschutz","Legal notice & privacy"),t("Impressum und Datenschutzhinweise der Website «Lepidoptera der Region Basiliensis».","Legal notice and privacy information of the website “Lepidoptera of the Region Basiliensis”."));
 }
 
 /* ===================== Router ===================== */

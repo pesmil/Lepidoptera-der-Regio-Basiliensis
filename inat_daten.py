@@ -25,7 +25,13 @@ SP_RANKS = {"species", "complex", "subspecies", "hybrid"}
 LIZENZEN = {"cc0", "cc-by", "cc-by-sa", "cc-by-nc", "cc-by-nc-sa", "cc-by-nd", "cc-by-nc-nd"}  # wie CONFIG.photoLicenses
 MONATE = {"de": ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"],
           "en": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]}
-SEITE = {"de": "Lepidoptera der Regio Basiliensis", "en": "Lepidoptera of the Regio Basiliensis"}
+SEITE = {"de": "Lepidoptera der Region Basiliensis", "en": "Lepidoptera of the Region Basiliensis"}
+# Qualitätsstufen, die zählen (wie CONFIG.qualityGrades in index.html); "casual" = Gelegentlich ist ausgeschlossen
+QUALITAET = "research,needs_id"
+# Familien der Grossschmetterlinge (wie CONFIG.familyOrder in index.html); alle übrigen zählen als Kleinschmetterlinge
+GROSS = {"Hepialidae", "Cossidae", "Zygaenidae", "Limacodidae", "Psychidae", "Sesiidae", "Lasiocampidae", "Endromidae",
+         "Saturniidae", "Sphingidae", "Drepanidae", "Hesperiidae", "Papilionidae", "Pieridae", "Riodinidae", "Lycaenidae", "Nymphalidae",
+         "Geometridae", "Notodontidae", "Erebidae", "Nolidae", "Noctuidae"}
 
 API = "https://api.inaturalist.org/v1"
 PAUSE = 1.0  # Sekunden zwischen Anfragen (iNat empfiehlt höchstens ~60 pro Minute)
@@ -91,7 +97,8 @@ def lade_beobachtungen(projekt):
     """Alle Beobachtungen des Projekts, seitenweise nach ID (stabil auch bei vielen tausend)."""
     alle, ab = [], 0
     while True:
-        d = api("/observations", {"project_id": projekt, "per_page": 200, "order_by": "id", "order": "asc", "id_above": ab})
+        q = {"quality_grade": QUALITAET} if QUALITAET else {}
+        d = api("/observations", {"project_id": projekt, **q, "per_page": 200, "order_by": "id", "order": "asc", "id_above": ab})
         res = d["results"]
         if not res:
             return alle
@@ -139,11 +146,15 @@ def schreibe_json(pfad, daten):
 def berechne(obs, familien, hist):
     taxa_info, n_exakt = {}, defaultdict(int)
     jahre, beobachter = defaultdict(int), set()
+    jahre_g = {"macro": defaultdict(int), "micro": defaultdict(int)}  # Nenner der relativen Häufigkeit pro Gruppe
     perioden_total, perioden_art = defaultdict(int), defaultdict(lambda: defaultdict(int))
     for o in obs:
         y, m, d = ymd(o)
         if y:
             jahre[str(y)] += 1
+            fid = next((a for a in (o.get("taxon") or {}).get("ancestor_ids") or [] if a in familien), None)
+            if fid:
+                jahre_g["macro" if familien[fid][0] in GROSS else "micro"][str(y)] += 1
         if o.get("user"):
             beobachter.add(o["user"]["id"])
         if m and d:
@@ -183,6 +194,7 @@ def berechne(obs, familien, hist):
         if tid not in pro_art:
             continue
         eintrag["f"] = 1  # Datei arten/<id>.json vorhanden
+        eintrag["q"] = sum(1 for o in pro_art[tid] if o.get("quality_grade") == "research")  # davon Forschungsqualität
         liste = sorted(pro_art[tid], key=lambda o: (o.get("observed_on") or "", o["id"]), reverse=True)
         recs, aj = [], defaultdict(int)
         for o in liste:
@@ -190,7 +202,7 @@ def berechne(obs, familien, hist):
             c = (o.get("geojson") or {}).get("coordinates") or [None, None]
             lat = round(c[1], 5) if c[1] is not None else None
             lon = round(c[0], 5) if c[0] is not None else None
-            recs.append([y, m, d, lat, lon, stadium(o), o.get("place_guess") or "", o["id"]])
+            recs.append([y, m, d, lat, lon, stadium(o), o.get("place_guess") or "", o["id"], 1 if o.get("quality_grade") == "research" else 0])
             if y:
                 aj[str(y)] += 1
         fotos = []
@@ -221,6 +233,7 @@ def berechne(obs, familien, hist):
     uebersicht = {
         "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "total": len(obs), "observers": len(beobachter), "years": dict(sorted(jahre.items())),
+        "years_g": {k: dict(sorted(v.items())) for k, v in jahre_g.items()},
         "families": {str(k): v for k, v in familien.items() if any(a.get("fam") == k for a in arten)},
         "species": arten,
         "periods": {k: {"t": perioden_total[k], "s": sorted(([tid, n] for tid, n in perioden_art[k].items()), key=lambda x: -x[1])}
@@ -295,10 +308,10 @@ def flugzeit_text(recs, lang="de"):
 TEXT = {
     "de": dict(fam="Familie", nachw="Nachweise", total="Total", hist="davon historisch", erst="Erster Nachweis", letzt="Letzter Nachweis",
                flug="Flugzeit", laden="Karte und Diagramme werden geladen …",
-               beschr="{name}: Verbreitungskarte, Flugzeit, Häufigkeit und Fotos aus der Regio Basiliensis. {n} Nachweise."),
+               beschr="{name}: Verbreitungskarte, Flugzeit, Häufigkeit und Fotos aus der Region Basiliensis. {n} Nachweise."),
     "en": dict(fam="Family", nachw="Records", total="Total", hist="of which historical", erst="First record", letzt="Latest record",
                flug="Flight period", laden="Loading map and charts …",
-               beschr="{name}: distribution map, flight period, frequency and photos from the Regio Basiliensis. {n} records."),
+               beschr="{name}: distribution map, flight period, frequency and photos from the Region Basiliensis. {n} records."),
 }
 
 
