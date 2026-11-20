@@ -1,0 +1,29 @@
+BILDER DER WEBSITE AUSWECHSELN
+==============================
+
+In diesem Ordner liegen alle Bilder der Website, die du selbst bestimmst.
+Die Artfotos kommen automatisch von iNaturalist und gehören nicht hierher.
+
+So wechselst du ein Bild aus:
+1. Das neue Bild genau gleich benennen wie das alte (Kleinbuchstaben, Endung .jpg).
+2. Die alte Datei hier ersetzen.
+3. Bildtext und Bildnachweis in «bildtexte.js» anpassen (mit einem Texteditor öffnen).
+4. Den Ordner wieder auf GitHub hochladen. Im Browser eventuell neu laden (Strg+F5 bzw. Cmd+Shift+R).
+
+Dateien
+-------
+banner.jpg          Grosses Bild oben auf der Startseite.
+                    Querformat, etwa 2000 × 1300 Pixel, möglichst unter 400 KB.
+                    Der Titel steht links auf dem Bild: links eher dunkel und ruhig wählen.
+
+landschaft-1.jpg    Landschaftsbilder auf der Seite «Projekt», 1 bis 6 Stück.
+… bis               Querformat 3:2, etwa 1200 × 800 Pixel, möglichst unter 300 KB.
+landschaft-6.jpg    Fehlt eine Nummer, wird sie einfach ausgelassen.
+                    Gibt es noch keines, zeigt die Seite Platzhalter «Landschaftsbild folgt».
+
+vorschau.jpg        Vorschaubild, wenn jemand die Website in WhatsApp, Mail usw. teilt.
+                    Genau 1200 × 630 Pixel.
+
+bildtexte.js        Beschreibung (deutsch und englisch) und Bildnachweis zu jedem Bild.
+
+Tipp: Fotos vor dem Hochladen verkleinern, z. B. mit https://squoosh.app (Format «MozJPEG», Qualität etwa 80).
