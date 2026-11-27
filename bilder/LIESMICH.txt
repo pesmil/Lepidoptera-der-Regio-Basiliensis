@@ -1,0 +1,50 @@
+BILDER DER WEBSITE AUSWECHSELN
+==============================
+
+In diesem Ordner (webseite_vorlage\bilder im Projektordner) liegen alle Bilder der Website,
+die du selbst bestimmst. Nicht in webseite\bilder ablegen: dieser Ordner wird bei jedem
+«Webseite erzeugen» neu geschrieben.
+Die Artfotos kommen automatisch von iNaturalist und gehören nicht hierher.
+
+So wechselst du ein Bild aus:
+1. Das neue Bild genau gleich benennen wie das alte (Kleinbuchstaben, Endung .jpg).
+2. Die alte Datei hier ersetzen.
+3. Bildtext und Bildnachweis in «bildtexte.js» anpassen (mit einem Texteditor öffnen).
+4. «Webseite erzeugen» (Oberfläche) bzw. aktualisieren.bat ausführen.
+   Im Browser eventuell neu laden (Strg+F5 bzw. Cmd+Shift+R).
+
+Dateien
+-------
+banner.jpg          Grosses Bild oben auf der Startseite.
+                    Querformat 2:1, am besten 3840 × 1920 Pixel (oder mindestens 2400 × 1200), als JPG in hoher Qualität.
+                    Tier in die Mitte bis rechts, oben und unten etwas Rand lassen.
+                    (Am Handy wird ein höherer Ausschnitt gezeigt, das Motiv eher rechts der Mitte.)
+                    Der Titel steht links auf dem Bild: links eher dunkel und ruhig wählen.
+
+banner_2.jpg        Weitere Bannerbilder (freiwillig): banner_2, banner_3, banner_4 … (auch banner-2 oder Banner_2,
+banner_3.jpg …      und auch .png/.webp). Gibt es mehr als ein Banner, wechselt die Startseite alle 7 Sekunden
+                    sanft zum nächsten Bild (Karussell). banner.jpg ist immer das erste und lädt sofort,
+                    die weiteren werden erst danach geladen. Gleiche Regeln wie bei banner.jpg (links eher dunkel).
+                    «Webseite erzeugen» (gilt auch für banner.jpg) lässt eine .jpg bis 3840 Pixel Breite unverändert,
+                    andere Formate werden in JPG (Qualität 92) umgewandelt, grössere Bilder auf 3840 Pixel verkleinert.
+                    Zusätzlich entstehen kleinere Fassungen (1280 und 2400 Pixel) für Handys und normale Bildschirme;
+                    jeder Bildschirm lädt automatisch die passende Grösse.
+                    Bildtext/Bildnachweis: in «bildtexte.js» unter banner_2, banner_3 … (siehe unten).
+                    Kein Wechsel, wenn «Bewegung reduzieren» eingestellt ist.
+
+landschaft-1.jpg    Landschaftsbilder auf der Seite «Projekt», 1 bis 6 Stück, in dieser Reihenfolge.
+… bis               Querformat 3:2 (wird sonst auf 3:2 zugeschnitten), mindestens 1200 × 800 Pixel.
+landschaft-6.jpg    Auch .jpeg, .png, .webp oder .tif und grosse Kamerabilder gehen: «Webseite erzeugen»
+                    wandelt sie in der Kopie in JPG um und verkleinert auf höchstens 1600 Pixel
+                    (dein Original bleibt). Fehlt eine Nummer, wird sie ausgelassen.
+                    Gibt es noch keines, zeigt die Seite Platzhalter «Landschaftsbild folgt».
+
+vorschau.jpg        Vorschaubild, wenn jemand die Website in WhatsApp, Mail usw. teilt.
+                    Genau 1200 × 630 Pixel.
+
+bildtexte.js        Beschreibung (deutsch, englisch und französisch) und Bildnachweis zu jedem Bild.
+                    Für weitere Banner nach dem Block «banner: {…},» einfügen (Komma am Ende nicht vergessen):
+                      banner_2: {de: "…", en: "…", fr: "…", credit: "Foto: Vorname Name"},
+                      banner_3: {de: "…", en: "…", fr: "…", credit: "Foto: Vorname Name"},
+
+Tipp: Fotos vor dem Hochladen verkleinern, z. B. mit https://squoosh.app (Format «MozJPEG», Qualität etwa 80).
